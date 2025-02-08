@@ -2,11 +2,11 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <title>Luminko</title>
+  <title>Plinko – Игра со ставками</title>
   <!-- Подключаем шрифт Roboto -->
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
   <style>
-    /* Адаптивный базовый стиль */
+    /* Общие и адаптивные стили */
     * {
       box-sizing: border-box;
     }
@@ -37,7 +37,7 @@
       margin-bottom: 20px;
     }
     .tab-link {
-      background: #fff;
+      background: linear-gradient(45deg, #fff, #eee);
       color: #333;
       border: none;
       padding: 10px 16px;
@@ -45,19 +45,26 @@
       cursor: pointer;
       transition: background 0.3s, transform 0.2s;
       font-weight: bold;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
     }
     .tab-link.active {
-      background: #f1f1f1;
+      background: linear-gradient(45deg, #f1f1f1, #ddd);
       transform: scale(1.05);
     }
-    /* Стили для содержимого вкладок */
+    /* Стили для содержимого вкладок с анимацией */
     .tab-content {
       display: none;
+      opacity: 0;
     }
     .tab-content.active {
       display: block;
+      animation: fadeIn 0.4s ease forwards;
     }
-    /* Вкладка Игра */
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    /* Вкладка "Игра" */
     #game-header {
       display: flex;
       justify-content: space-between;
@@ -78,26 +85,29 @@
       border: none;
       margin-left: 8px;
     }
+    /* Дизайн кнопок */
     button {
-      padding: 8px 12px;
-      margin: 8px 4px;
-      font-size: 16px;
+      background: linear-gradient(45deg, #ffffff, #e0e0e0);
+      color: #333;
       border: none;
       border-radius: 8px;
-      background: #fff;
-      color: #333;
+      padding: 10px 16px;
+      margin: 8px 4px;
+      font-size: 16px;
       cursor: pointer;
-      transition: background 0.3s, transform 0.2s;
+      transition: background 0.3s, transform 0.2s, box-shadow 0.2s;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
     }
     button:hover {
-      background: #f1f1f1;
+      background: linear-gradient(45deg, #f1f1f1, #dcdcdc);
       transform: scale(1.05);
+      box-shadow: 0 4px 8px rgba(0,0,0,0.3);
     }
-    /* Канва растягивается на всю ширину контейнера */
+    /* Канва – растягивается на всю ширину контейнера */
     canvas {
       display: block;
       width: 100%;
-      /* Высота будет установлена скриптом для сохранения пропорций */
+      /* Высота будет установлена скриптом для сохранения соотношения сторон */
       border: 2px solid #fff;
       border-radius: 8px;
       background: rgba(255,255,255,0.2);
@@ -114,7 +124,7 @@
       <button class="tab-link" data-tab="settings-tab">Настройки</button>
     </div>
     <div id="tab-content">
-      <!-- Вкладка Игра -->
+      <!-- Вкладка "Игра" -->
       <div id="game-tab" class="tab-content active">
         <div id="game-header">
           <div>Баланс: <span id="coinCount">100</span></div>
@@ -127,13 +137,13 @@
         <canvas id="gameCanvas"></canvas>
         <div id="gameMessage"></div>
       </div>
-      <!-- Вкладка Бонусы -->
+      <!-- Вкладка "Бонусы" -->
       <div id="bonuses-tab" class="tab-content">
         <h2>Бонусы</h2>
         <button id="dailyBonus">Ежедневный бонус (+50 монет)</button>
         <div id="bonusMessage"></div>
       </div>
-      <!-- Вкладка Настройки -->
+      <!-- Вкладка "Настройки" -->
       <div id="settings-tab" class="tab-content">
         <h2>Настройки</h2>
         <div id="telegramInfo"></div>
@@ -144,9 +154,9 @@
   </div>
 
   <script>
-    /* ===============================
-       Управление вкладками
-       =============================== */
+    /* =====================================
+       Управление вкладками с анимацией
+       ===================================== */
     const tabLinks = document.querySelectorAll('.tab-link');
     const tabContents = document.querySelectorAll('.tab-content');
 
@@ -159,9 +169,9 @@
       });
     });
 
-    /* ===============================
+    /* =====================================
        Глобальные переменные игры
-       =============================== */
+       ===================================== */
     let coinCount = 100;
     let currentBet = 0;
     let ball = null;
@@ -169,11 +179,11 @@
     let buckets = [];
     let animationFrameId;
 
-    // Исходная (базовая) конфигурация для холста 400x600
+    // Обновлённое соотношение: базовая ширина 400px, базовая высота 800px
     const baseWidth = 400;
-    const baseHeight = 600;
+    const baseHeight = 800;
 
-    // Конфигурация игры – значения будут масштабироваться в зависимости от размеров холста
+    // Исходная конфигурация игры (значения будут масштабироваться)
     const gameConfig = {
       rows: 9,            // Количество рядов пегов
       pegSpacingX: 55,    // Исходное расстояние между пегами по горизонтали
@@ -184,8 +194,8 @@
       gravity: 0.12,      // Гравитация
       friction: 0.99,     // Коэффициент трения
       restitution: 0.5,   // Коэффициент упругости при столкновениях
-      bucketHeight: 50,   // Исходная высота области корзины
-      basketOffsetMargin: 20  // Дополнительный отступ (корзина будет ниже)
+      bucketHeight: 50,   // Исходная высота корзины
+      basketOffsetMargin: 40  // Отступ корзины от низа холста (чтобы она была ниже препятствий)
     };
 
     // Получаем элементы холста и интерфейса
@@ -201,9 +211,9 @@
     const saveMessageDiv = document.getElementById('saveMessage');
     const telegramInfoDiv = document.getElementById('telegramInfo');
 
-    /* ===============================
+    /* =====================================
        Интеграция с Telegram
-       =============================== */
+       ===================================== */
     let telegramUser = null;
     if (window.Telegram && Telegram.WebApp && Telegram.WebApp.initDataUnsafe && Telegram.WebApp.initDataUnsafe.user) {
       telegramUser = Telegram.WebApp.initDataUnsafe.user;
@@ -212,9 +222,9 @@
       telegramInfoDiv.innerHTML = `<p>Не подключено к Telegram.</p>`;
     }
 
-    /* ===============================
-       Сохранение и загрузка
-       =============================== */
+    /* =====================================
+       Сохранение и загрузка игры
+       ===================================== */
     function getSaveKey() {
       return telegramUser ? 'plinkoGame_' + telegramUser.id : 'plinkoGame_guest';
     }
@@ -237,42 +247,37 @@
     }
     loadGame();
 
-    /* Автоматическое сохранение при выходе из веб‑приложения */
+    /* Автоматическое сохранение при выходе/обновлении страницы */
     window.addEventListener('beforeunload', saveGame);
 
-    /* ===============================
+    /* =====================================
        Адаптация холста под размеры экрана
-       =============================== */
+       ===================================== */
     function updateCanvasSize() {
       const container = document.getElementById('app-container');
-      // Устанавливаем ширину холста равной ширине контейнера
       const newWidth = container.clientWidth;
-      // Сохраняем исходное соотношение сторон 400:600 (2:3)
       canvas.width = newWidth;
       canvas.height = newWidth * (baseHeight / baseWidth);
-      // Вычисляем коэффициент масштабирования
       const scale = newWidth / baseWidth;
-      // Масштабируем все параметры
+      // Масштабируем параметры игры
       gameConfig.pegSpacingX = 55 * scale;
       gameConfig.pegSpacingY = 60 * scale;
       gameConfig.offsetY = 100 * scale;
       gameConfig.pegRadius = 6 * scale;
       gameConfig.ballRadius = 10 * scale;
       gameConfig.bucketHeight = 50 * scale;
-      gameConfig.basketOffsetMargin = 20 * scale;
-      // Перестраиваем препятствия и корзины
+      gameConfig.basketOffsetMargin = 40 * scale;
       buildPegs();
       buildBuckets();
       drawBoard();
     }
-    // Вызываем при загрузке и изменении размеров окна
     window.addEventListener('resize', updateCanvasSize);
     updateCanvasSize();
 
-    /* ===============================
+    /* =====================================
        Построение пегов и корзин
-       =============================== */
-    // Построение пегов в виде треугольной пирамиды (1 в первом ряду, 2 во втором, …)
+       ===================================== */
+    // Построение пегов – треугольная пирамида (1 в первом ряду, 2 во втором, …)
     function buildPegs() {
       pegs = [];
       for (let row = 0; row < gameConfig.rows; row++) {
@@ -286,7 +291,7 @@
         }
       }
     }
-    // Построение корзин с множителями. Корзины отрисовываются ниже препятствий
+    // Построение корзин с множителями – корзины отрисовываются ниже поля с пегами
     function buildBuckets() {
       buckets = [];
       const bucketCount = gameConfig.rows + 1;
@@ -299,13 +304,13 @@
       }
     }
 
-    /* ===============================
+    /* =====================================
        Отрисовка игрового поля
-       =============================== */
+       ===================================== */
     function drawBoard() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       
-      // Отрисовка пегов
+      // Рисуем пеги (препятствия)
       ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
       for (const peg of pegs) {
         ctx.beginPath();
@@ -313,7 +318,7 @@
         ctx.fill();
       }
       
-      // Отрисовка корзин с множителями (корзина сдвинута вниз на basketOffsetMargin)
+      // Рисуем корзины с множителями – область расположена ниже пегов
       const bucketY = canvas.height - gameConfig.bucketHeight - gameConfig.basketOffsetMargin;
       ctx.strokeStyle = '#fff';
       ctx.lineWidth = 2;
@@ -328,7 +333,7 @@
         ctx.fillText(bucket.multiplier + "x", bucket.x, bucketY + gameConfig.bucketHeight / 2);
       }
       
-      // Отрисовка мяча с градиентом
+      // Рисуем мяч с градиентом
       if (ball) {
         const grad = ctx.createRadialGradient(
           ball.x - 5, ball.y - 5, gameConfig.ballRadius * 0.3,
@@ -343,9 +348,9 @@
       }
     }
 
-    /* ===============================
+    /* =====================================
        Физика и игровой цикл
-       =============================== */
+       ===================================== */
     function update() {
       if (ball) {
         // Применяем гравитацию и трение
@@ -384,7 +389,7 @@
           ball.vx = -ball.vx * gameConfig.restitution;
         }
         
-        // Если мяч достиг области корзин (с учётом дополнительного отступа)
+        // Если мяч достиг области корзин (учитываем отступ)
         if (ball.y > canvas.height - gameConfig.bucketHeight - gameConfig.basketOffsetMargin - gameConfig.ballRadius) {
           const bucket = getBucketForBall(ball.x);
           if (bucket) {
@@ -407,7 +412,7 @@
       drawBoard();
       animationFrameId = requestAnimationFrame(update);
     }
-    // Определение, в какую корзину попал мяч по горизонтальной координате
+    // Определение, в какую корзину попал мяч (по горизонтальной координате)
     function getBucketForBall(x) {
       for (const bucket of buckets) {
         const left = bucket.x - bucket.width / 2;
@@ -429,10 +434,10 @@
       animationFrameId = requestAnimationFrame(update);
     }
 
-    /* ===============================
+    /* =====================================
        Обработчики событий
-       =============================== */
-    // При клике «Сделать ставку» проверяем ставку, списываем её и запускаем мяч
+       ===================================== */
+    // При клике "Сделать ставку" проверяем ставку, списываем средства и запускаем мяч
     placeBetBtn.addEventListener('click', () => {
       const bet = parseFloat(betAmountInput.value);
       if (isNaN(bet) || bet <= 0) {
@@ -464,7 +469,7 @@
     // Кнопка "Сохранить игру"
     saveGameBtn.addEventListener('click', saveGame);
 
-    // Первоначальная отрисовка (pegs и buckets уже построены в updateCanvasSize)
+    // Первоначальная отрисовка
     drawBoard();
   </script>
 </body>
