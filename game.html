@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Plinko Betting Game</title>
+  <!-- Подключаем шрифт Roboto -->
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    /* Глобальные стили */
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Roboto', sans-serif;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+    #app-container {
+      background: rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(10px);
+      border-radius: 16px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.37);
+      width: 440px;
+      padding: 20px;
+    }
+    /* Стили для навигации по вкладкам */
+    #nav-tabs {
+      display: flex;
+      justify-content: space-around;
+      margin-bottom: 20px;
+    }
+    .tab-link {
+      background: #fff;
+      color: #333;
+      border: none;
+      padding: 10px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.3s, transform 0.2s;
+      font-weight: bold;
+    }
+    .tab-link.active {
+      background: #f1f1f1;
+      transform: scale(1.05);
+    }
+    /* Стили для содержимого вкладок */
+    .tab-content {
+      display: none;
+    }
+    .tab-content.active {
+      display: block;
+    }
+    /* Стили для вкладки Game */
+    #game-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    #game-header div {
+      font-size: 18px;
+    }
+    #betSection {
+      margin: 10px 0;
+    }
+    #betSection input[type="number"] {
+      width: 80px;
+      padding: 6px;
+      border-radius: 4px;
+      border: none;
+      margin-left: 8px;
+    }
+    button {
+      padding: 8px 12px;
+      margin: 8px 4px;
+      font-size: 16px;
+      border: none;
+      border-radius: 8px;
+      background: #fff;
+      color: #333;
+      cursor: pointer;
+      transition: background 0.3s, transform 0.2s;
+    }
+    button:hover {
+      background: #f1f1f1;
+      transform: scale(1.05);
+    }
+    canvas {
+      display: block;
+      margin: 0 auto 10px;
+      border: 2px solid #fff;
+      border-radius: 8px;
+      background: rgba(255,255,255,0.2);
+    }
+  </style>
+</head>
+<body>
+  <div id="app-container">
+    <!-- Навигация по вкладкам -->
+    <div id="nav-tabs">
+      <button class="tab-link active" data-tab="game-tab">Game</button>
+      <button class="tab-link" data-tab="bonuses-tab">Bonuses</button>
+      <button class="tab-link" data-tab="settings-tab">Settings</button>
+    </div>
+    <div id="tab-content">
+      <!-- Вкладка Game -->
+      <div id="game-tab" class="tab-content active">
+        <div id="game-header">
+          <div>Balance: <span id="coinCount">100</span></div>
+          <div id="betSection">
+            <label for="betAmount">Bet:</label>
+            <input type="number" id="betAmount" min="1" value="10">
+            <button id="placeBet">Place Bet</button>
+          </div>
+        </div>
+        <canvas id="gameCanvas" width="400" height="600"></canvas>
+        <div id="gameMessage"></div>
+      </div>
+      <!-- Вкладка Bonuses -->
+      <div id="bonuses-tab" class="tab-content">
+        <h2>Bonuses</h2>
+        <button id="dailyBonus">Daily Bonus (+50 coins)</button>
+        <div id="bonusMessage"></div>
+      </div>
+      <!-- Вкладка Settings -->
+      <div id="settings-tab" class="tab-content">
+        <h2>Settings</h2>
+        <div id="telegramInfo"></div>
+        <button id="saveGameBtn">Save Game</button>
+        <div id="saveMessage"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /* ============================
+       Управление вкладками
+       ============================ */
+    const tabLinks = document.querySelectorAll('.tab-link');
+    const tabContents = document.querySelectorAll('.tab-content');
+
+    tabLinks.forEach(link => {
+      link.addEventListener('click', () => {
+        tabLinks.forEach(l => l.classList.remove('active'));
+        tabContents.forEach(tc => tc.classList.remove('active'));
+        link.classList.add('active');
+        document.getElementById(link.getAttribute('data-tab')).classList.add('active');
+      });
+    });
+
+    /* ============================
+       Глобальные переменные игры
+       ============================ */
+    let coinCount = 100;
+    let currentBet = 0;
+    let ball = null;
+    let pegs = [];
+    let buckets = [];
+    let animationFrameId;
+
+    // Конфигурация игры
+    const gameConfig = {
+      rows: 9,              // Количество рядов пегов (можно менять в зависимости от сложности)
+      pegSpacingX: 55,
+      pegSpacingY: 60,
+      offsetY: 100,
+      pegRadius: 6,
+      ballRadius: 10,
+      gravity: 0.12,        // Низкая гравитация для плавного падения
+      friction: 0.99,       // Лёгкое трение
+      restitution: 0.5,     // Коэффициент упругости при столкновениях
+      bucketHeight: 50      // Высота зоны бакетов (расположенной внизу)
+    };
+
+    // Получаем элементы канвы и интерфейса
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const coinCountSpan = document.getElementById('coinCount');
+    const betAmountInput = document.getElementById('betAmount');
+    const placeBetBtn = document.getElementById('placeBet');
+    const gameMessageDiv = document.getElementById('gameMessage');
+    const dailyBonusBtn = document.getElementById('dailyBonus');
+    const bonusMessageDiv = document.getElementById('bonusMessage');
+    const saveGameBtn = document.getElementById('saveGameBtn');
+    const saveMessageDiv = document.getElementById('saveMessage');
+    const telegramInfoDiv = document.getElementById('telegramInfo');
+
+    /* ============================
+       Интеграция с Telegram
+       ============================ */
+    let telegramUser = null;
+    if (window.Telegram && Telegram.WebApp && Telegram.WebApp.initDataUnsafe && Telegram.WebApp.initDataUnsafe.user) {
+      telegramUser = Telegram.WebApp.initDataUnsafe.user;
+      telegramInfoDiv.innerHTML = `<p>Logged in as: ${telegramUser.first_name} ${telegramUser.last_name || ''} (@${telegramUser.username || 'no username'})</p>`;
+    } else {
+      telegramInfoDiv.innerHTML = `<p>Not connected to Telegram.</p>`;
+    }
+
+    /* ============================
+       Сохранение и загрузка
+       ============================ */
+    function getSaveKey() {
+      return telegramUser ? 'plinkoGame_' + telegramUser.id : 'plinkoGame_guest';
+    }
+    function saveGame() {
+      const saveData = { coinCount };
+      localStorage.setItem(getSaveKey(), JSON.stringify(saveData));
+      saveMessageDiv.textContent = "Game saved!";
+      setTimeout(() => saveMessageDiv.textContent = "", 2000);
+    }
+    function loadGame() {
+      const data = localStorage.getItem(getSaveKey());
+      if (data) {
+        const saveData = JSON.parse(data);
+        coinCount = saveData.coinCount || 100;
+        updateBalance();
+      }
+    }
+    function updateBalance() {
+      coinCountSpan.textContent = coinCount;
+    }
+    loadGame();
+
+    /* Автоматическое сохранение при выходе из веб-приложения */
+    window.addEventListener('beforeunload', saveGame);
+
+    /* ============================
+       Построение пегов и бакетов
+       ============================ */
+    // Построение пегов в виде треугольной пирамиды (1 в первом ряду, 2 во втором, …)
+    function buildPegs() {
+      pegs = [];
+      for (let row = 0; row < gameConfig.rows; row++) {
+        const pegCount = row + 1;
+        const totalWidth = (pegCount - 1) * gameConfig.pegSpacingX;
+        const startX = (canvas.width / 2) - (totalWidth / 2);
+        const y = gameConfig.offsetY + row * gameConfig.pegSpacingY;
+        for (let i = 0; i < pegCount; i++) {
+          const x = startX + i * gameConfig.pegSpacingX;
+          pegs.push({ x, y });
+        }
+      }
+    }
+    // Построение бакетов с множителями
+    function buildBuckets() {
+      buckets = [];
+      const bucketCount = gameConfig.rows + 1;
+      const bucketWidth = canvas.width / bucketCount;
+      for (let i = 0; i < bucketCount; i++) {
+        const x = i * bucketWidth + bucketWidth / 2;
+        // Множитель от 0.5 до 3.0 (округляем до одного знака)
+        const multiplier = parseFloat((Math.random() * 2.5 + 0.5).toFixed(1));
+        buckets.push({ x, width: bucketWidth, multiplier });
+      }
+    }
+
+    /* ============================
+       Отрисовка игрового поля
+       ============================ */
+    function drawBoard() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // Рисуем пеги
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+      for (const peg of pegs) {
+        ctx.beginPath();
+        ctx.arc(peg.x, peg.y, gameConfig.pegRadius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      
+      // Рисуем бакеты с множителями
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      for (const bucket of buckets) {
+        const bucketY = canvas.height - gameConfig.bucketHeight;
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
+        ctx.fillRect(bucket.x - bucket.width / 2, bucketY, bucket.width, gameConfig.bucketHeight);
+        ctx.strokeRect(bucket.x - bucket.width / 2, bucketY, bucket.width, gameConfig.bucketHeight);
+        ctx.fillStyle = '#fff';
+        ctx.font = '16px Roboto';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(bucket.multiplier + "x", bucket.x, bucketY + gameConfig.bucketHeight/2);
+      }
+      
+      // Рисуем мяч с градиентом
+      if (ball) {
+        const grad = ctx.createRadialGradient(
+          ball.x - 5, ball.y - 5, gameConfig.ballRadius * 0.3,
+          ball.x, ball.y, gameConfig.ballRadius
+        );
+        grad.addColorStop(0, '#ff758c');
+        grad.addColorStop(1, '#ff7eb3');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(ball.x, ball.y, gameConfig.ballRadius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    /* ============================
+       Физика и игровой цикл
+       ============================ */
+    function update() {
+      if (ball) {
+        // Применяем гравитацию и трение
+        ball.vy += gameConfig.gravity;
+        ball.vx *= gameConfig.friction;
+        ball.x += ball.vx;
+        ball.y += ball.vy;
+        
+        // Обработка столкновений с пегами
+        for (const peg of pegs) {
+          const dx = ball.x - peg.x;
+          const dy = ball.y - peg.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          const minDist = gameConfig.ballRadius + gameConfig.pegRadius;
+          if (distance < minDist) {
+            const overlap = minDist - distance;
+            const nx = dx / distance;
+            const ny = dy / distance;
+            ball.x += nx * overlap;
+            ball.y += ny * overlap;
+            const dot = ball.vx * nx + ball.vy * ny;
+            if (dot < 0) {
+              ball.vx -= (1 + gameConfig.restitution) * dot * nx;
+              ball.vy -= (1 + gameConfig.restitution) * dot * ny;
+            }
+          }
+        }
+        
+        // Отскок от боковых стен
+        if (ball.x < gameConfig.ballRadius) {
+          ball.x = gameConfig.ballRadius;
+          ball.vx = -ball.vx * gameConfig.restitution;
+        }
+        if (ball.x > canvas.width - gameConfig.ballRadius) {
+          ball.x = canvas.width - gameConfig.ballRadius;
+          ball.vx = -ball.vx * gameConfig.restitution;
+        }
+        
+        // Если мяч достиг зоны бакетов
+        if (ball.y > canvas.height - gameConfig.bucketHeight - gameConfig.ballRadius) {
+          const bucket = getBucketForBall(ball.x);
+          if (bucket) {
+            const multiplier = bucket.multiplier;
+            const winAmount = parseFloat((currentBet * multiplier).toFixed(2));
+            coinCount += winAmount;
+            gameMessageDiv.textContent = `Bucket multiplier: ${multiplier}x. You win ${winAmount} coins!`;
+          } else {
+            gameMessageDiv.textContent = "No bucket hit!";
+          }
+          ball = null;
+          updateBalance();
+          placeBetBtn.disabled = false;
+          saveGame();
+          cancelAnimationFrame(animationFrameId);
+          drawBoard();
+          return;
+        }
+      }
+      drawBoard();
+      animationFrameId = requestAnimationFrame(update);
+    }
+    // Определяем, в какой бакет попал мяч, по его горизонтальной координате
+    function getBucketForBall(x) {
+      for (const bucket of buckets) {
+        const left = bucket.x - bucket.width / 2;
+        const right = bucket.x + bucket.width / 2;
+        if (x >= left && x < right) return bucket;
+      }
+      return null;
+    }
+
+    // Функция для запуска мяча
+    function dropBall() {
+      ball = {
+        x: canvas.width / 2,
+        y: 30,
+        vx: (Math.random() - 0.5) * 0.5,
+        vy: 0
+      };
+      placeBetBtn.disabled = true;
+      animationFrameId = requestAnimationFrame(update);
+    }
+
+    /* ============================
+       Обработчики событий
+       ============================ */
+    // При нажатии «Place Bet» проверяем ставку, списываем её и запускаем мяч
+    placeBetBtn.addEventListener('click', () => {
+      const bet = parseFloat(betAmountInput.value);
+      if (isNaN(bet) || bet <= 0) {
+        gameMessageDiv.textContent = "Enter a valid bet amount.";
+        return;
+      }
+      if (bet > coinCount) {
+        gameMessageDiv.textContent = "Insufficient balance!";
+        return;
+      }
+      currentBet = bet;
+      coinCount -= bet;
+      updateBalance();
+      gameMessageDiv.textContent = "";
+      buildPegs();
+      buildBuckets();
+      dropBall();
+      saveGame();
+    });
+
+    // Кнопка Daily Bonus
+    dailyBonusBtn.addEventListener('click', () => {
+      coinCount += 50;
+      updateBalance();
+      bonusMessageDiv.textContent = "Daily Bonus: +50 coins!";
+      saveGame();
+      setTimeout(() => bonusMessageDiv.textContent = "", 2000);
+    });
+    // Кнопка Save Game
+    saveGameBtn.addEventListener('click', saveGame);
+
+    // Первичная отрисовка
+    buildPegs();
+    buildBuckets();
+    drawBoard();
+  </script>
+</body>
+</html>
